@@ -57,7 +57,7 @@ Fine-tuned on [EuroSAT](https://huggingface.co/datasets/tanganke/eurosat) (10-cl
 
 ## C++ inference
 
-The fine-tuned model is exported via `torch.jit.trace` to a self-contained TorchScript file and loaded for inference in C++ using LibTorch — no Python runtime required at inference time.
+The fine-tuned model is exported via `torch.jit.trace` to a self-contained TorchScript file and loaded for inference in C++ using LibTorch (GPU/CUDA build) — no Python runtime required at inference time.
 
 ```
 cpp_inference/
@@ -65,6 +65,40 @@ cpp_inference/
 ├── main.cpp
 └── model_ft_traced.pt
 ```
+
+### Prerequisites
+
+- **CUDA-capable NVIDIA GPU** with drivers installed
+- **[CUDA Toolkit](https://developer.nvidia.com/cuda-downloads)** — a full toolkit install (not just the driver) is required for LibTorch's CMake build to link correctly; version should match your LibTorch download below
+- **[LibTorch](https://pytorch.org/get-started/locally/)** (C++/Java, CUDA build) — download and unzip anywhere; note the path for `CMakeLists.txt`
+- **CMake ≥ 3.18**
+- **MSVC** (via Visual Studio or Visual Studio Build Tools, "Desktop development with C++" workload)
+- A **C++20**-capable toolchain — this LibTorch build's headers require C++20, not C++17
+
+### Build steps
+
+1. Open `cpp_inference/CMakeLists.txt` in Visual Studio via `File → Open → CMake Project...`
+2. Edit `set(CMAKE_PREFIX_PATH "...")` in `CMakeLists.txt` to point at your actual LibTorch install location
+3. **Select the `x64-Release` configuration** — do not build in Debug. LibTorch's official downloads are Release builds; building your project in Debug against a Release LibTorch causes CRT mismatches and cryptic runtime file-loading errors (`errno 22` on `fopen`), even when the file path is correct.
+4. Build → Rebuild All
+5. Run (`Ctrl+F5`)
+
+Expected output:
+```
+Model loaded successfully.
+Running on: CUDA
+Output shape: [1, 10]
+Predicted class: <0-9>
+```
+
+(The predicted class will vary — `main.cpp` currently feeds in random noise as a placeholder input rather than a real preprocessed image.)
+
+### Common pitfalls
+
+- **`Could not find a package configuration file provided by "Torch"`** — `CMAKE_PREFIX_PATH` doesn't match your actual LibTorch unzip location (check for a nested `libtorch/libtorch/` folder from the zip extraction).
+- **`Caffe2Config.cmake` error about missing CUDA libraries** — the CUDA Toolkit (not just the driver) isn't installed, or isn't discoverable by CMake.
+- **`requires at least '/std:c++20'`** — set `CMAKE_CXX_STANDARD` to `20` in `CMakeLists.txt`.
+- **`fopen` fails with `errno 22` despite the file existing** — almost always a Debug/Release mismatch between your build configuration and the LibTorch binaries. Switch to `x64-Release`.
 
 ## Project structure
 
