@@ -1,20 +1,36 @@
+# Python
 __pycache__/
 *.pyc
-
 .venv/
 venv/
 
-*.safetensors
-*.bin
-*.pt
-*.pth
-
-
+# HuggingFace cache
 .cache/
 
+# Model weights
+*.pt
+*.pth
+*.safetensors
+*.bin
+*.onnx
 
-.ipynb_checkpoints/
+# C++ build artifacts
+cpp_inference/build/
+cpp_inference/out/
+*.exe
+*.obj
+*.dll
+*.exp
+*.lib
+*.pdb
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
 
+# Visual Studio
+.vs/
+*.vcxproj.user
 
+# OS junk
 .DS_Store
 Thumbs.db

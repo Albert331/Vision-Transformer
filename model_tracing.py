@@ -190,28 +190,6 @@ for k in our_sd:
 
 siglip.load_state_dict(our_sd)
 print("Unmatched keys:", missing)  
-ds = load_dataset("tanganke/eurosat")
-print(ds)
-
-class EuroSATDataset(Dataset):
-  def __init__(self, hf_dataset):
-    self.hf_dataset = hf_dataset
-
-  def __len__(self):
-    return len(self.hf_dataset)
-
-  def __getitem__(self, idx):
-    item = self.hf_dataset[idx]
-    image = item['image'].convert('RGB')
-    pixel_values = preprocess_image(image).squeeze(0)  
-    label = item['label']
-    return pixel_values,label
-
-train_dataset = EuroSATDataset(ds['train']) 
-test_dataset = EuroSATDataset(ds['test'])   
-
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
 class SiglipForClassification(nn.Module):
   def __init__(self,vision_transformer,hidden_size, num_classes):
@@ -237,97 +215,12 @@ for param in model_ft.classifier.parameters():
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model_ft = model_ft.to(device)
-
-optimizer = torch.optim.AdamW(model_ft.classifier.parameters(),lr=1e-3)
-criterion = nn.CrossEntropyLoss()
-
-num_epoch = 5
-
-for epoch in range(num_epoch):
-  model_ft.train()
-  total_loss = 0
-
-  for pixel_values, labels in train_loader:
-    pixel_values, labels = pixel_values.to(device), labels.to(device)
-
-    logits = model_ft(pixel_values)
-    loss = criterion(logits, labels)
-
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
-    total_loss += loss.item()
-
-  avg_loss = total_loss / len(train_loader)                       
-  print(f"Epoch {epoch+1}/{num_epoch}, Avg Loss: {avg_loss:.4f}")   
-
+model_ft.load_state_dict(torch.load('model_ft_trained.pt'))
+model_ft = model_ft.to(device)
 model_ft.eval()
-correct = 0
-total = 0
-
-with torch.no_grad():
-    for pixel_values, labels in test_loader:
-        pixel_values, labels = pixel_values.to(device), labels.to(device)
-        logits = model_ft(pixel_values)
-        preds = logits.argmax(dim=1)
-        correct += (preds == labels).sum().item()
-        total += labels.size(0)
-
-print(f"Test accuracy: {100 * correct / total:.2f}%")
 
 
-for layer in model_ft.vision_transformer.encoder.layers[-2:]:
-    for param in layer.parameters():
-        param.requires_grad = True
-
-for param in model_ft.classifier.parameters():
-    param.requires_grad = True
-
-trainable = sum(p.numel() for p in model_ft.parameters() if p.requires_grad)
-total = sum(p.numel() for p in model_ft.parameters())
-print(f"Trainable: {trainable:,} / Total: {total:,}")
-
-optimizer = torch.optim.AdamW([
-    {'params': model_ft.classifier.parameters(), 'lr': 1e-3},
-    {'params': model_ft.vision_transformer.encoder.layers[-2:].parameters(), 'lr': 1e-5},
-])
-
-num_epoch_ft = 3
-
-for epoch in range(num_epoch_ft):
-  model_ft.train()
-  total_loss = 0
-
-  for pixel_values, labels in train_loader:
-    pixel_values, labels = pixel_values.to(device), labels.to(device)
-
-    logits = model_ft(pixel_values)
-    loss = criterion(logits, labels)
-
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
-    total_loss += loss.item()
-
-  avg_loss = total_loss / len(train_loader)
-  print(f"Fine-tune epoch {epoch+1}/{num_epoch_ft}, Avg Loss: {avg_loss:.4f}")
-
-torch.save(model_ft.state_dict(), 'model_ft_trained.pt')
-print("Model saved.")
-
-
-model_ft.eval()
-correct = 0
-total = 0
-
-with torch.no_grad():
-    for pixel_values, labels in test_loader:
-        pixel_values, labels = pixel_values.to(device), labels.to(device)
-        logits = model_ft(pixel_values)
-        preds = logits.argmax(dim=1)
-        correct += (preds == labels).sum().item()
-        total += labels.size(0)
-
-print(f"Test accuracy after unfreezing: {100 * correct / total:.2f}%")
+example_input = torch.randn(1, 3, 224, 224).to(device)
+traced_model = torch.jit.trace(model_ft, example_input)
+traced_model.save("model_ft_traced.pt")
+print("Traced model saved.")
