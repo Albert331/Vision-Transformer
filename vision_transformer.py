@@ -22,7 +22,7 @@ def preprocess_image(image, image_size=224):
   return image_tensor
 
 
-# Re-defining SiglipVisionConfig from MnUR-YBRvprK to ensure it's available and consistent
+
 @dataclass
 class SiglipVisionConfig:
   num_channels: int =3
@@ -35,7 +35,7 @@ class SiglipVisionConfig:
   layer_norm_eps:float = 1e-6
   num_hidden_layers: int = 12
 
-# Re-defining SiglipVisionEmbeddings from MnUR-YBRvprK with the fix
+
 class SiglipVisionEmbeddings(nn.Module):
   def __init__(self, config: SiglipVisionConfig):
     super().__init__()
@@ -65,12 +65,11 @@ class SiglipVisionEmbeddings(nn.Module):
   def forward(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
     B, C, H, W = pixel_values.shape
     patch_embeds = self.patch_embedding(pixel_values)
-    embeddings = patch_embeds.flatten(start_dim=2,end_dim=-1) # FIX APPLIED HERE
+    embeddings = patch_embeds.flatten(start_dim=2,end_dim=-1) 
     embeddings = embeddings.transpose(1,2)
     embeddings = embeddings + self.position_embedding(self.position_ids)
     return embeddings
 
-# Re-defining SiglipMLP from zxh3gXe9uvK8
 class SiglipMLP(nn.Module):
   def __init__(self, config: SiglipVisionConfig):
     super().__init__()
@@ -84,7 +83,6 @@ class SiglipMLP(nn.Module):
     hidden_states = self.fc2(hidden_states)
     return hidden_states
 
-# Re-defining SiglipAttention from I6gGFLDcoMOO
 class SiglipAttention(nn.Module):
   def __init__(self, config: SiglipVisionConfig):
     super().__init__()
@@ -120,7 +118,7 @@ class SiglipAttention(nn.Module):
 
     return attn_outs
 
-# Re-defining SiglipEncoderLayer from -cgh7YkLx7pf
+
 class SiglipEncoderLayer(nn.Module):
   def __init__(self, config: SiglipVisionConfig):
     super().__init__()
@@ -143,7 +141,7 @@ class SiglipEncoderLayer(nn.Module):
     return hidden_states
 
 class SiglipEncoder(nn.Module):
-  """The conveyor belt: holds 12 stations, pushes data through all of them in order."""
+  
   def __init__(self, config: SiglipVisionConfig):
     super().__init__()
     self.layers = nn.ModuleList([SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -172,14 +170,14 @@ class SiglipVisionTransformer(nn.Module):
 siglip = SiglipVisionTransformer(SiglipVisionConfig(hidden_size=768, intermediate_size=3072))
 
 
-# load pretrained HF model
+
 hf_model = SiglipVisionModel.from_pretrained("google/siglip-base-patch16-224")
 hf_model.eval()
 
 siglip = SiglipVisionTransformer(SiglipVisionConfig(hidden_size=768, intermediate_size=3072))
 siglip.eval()
 
-# copy all matching weights
+
 hf_sd = hf_model.state_dict()
 our_sd = siglip.state_dict()
 
@@ -191,7 +189,7 @@ for k in our_sd:
         missing.append(k)
 
 siglip.load_state_dict(our_sd)
-print("Unmatched keys:", missing)   # should print an empty list
+print("Unmatched keys:", missing)  
 ds = load_dataset("tanganke/eurosat")
 print(ds)
 
@@ -261,6 +259,19 @@ for epoch in range(num_epoch):
 
     total_loss += loss.item()
 
-  avg_loss = total_loss / len(train_loader)                        # ← now indented, runs every epoch
-  print(f"Epoch {epoch+1}/{num_epoch}, Avg Loss: {avg_loss:.4f}")   # ← now indented, runs every epoch
+  avg_loss = total_loss / len(train_loader)                       
+  print(f"Epoch {epoch+1}/{num_epoch}, Avg Loss: {avg_loss:.4f}")   
 
+model_ft.eval()
+correct = 0
+total = 0
+
+with torch.no_grad():
+    for pixel_values, labels in test_loader:
+        pixel_values, labels = pixel_values.to(device), labels.to(device)
+        logits = model_ft(pixel_values)
+        preds = logits.argmax(dim=1)
+        correct += (preds == labels).sum().item()
+        total += labels.size(0)
+
+print(f"Test accuracy: {100 * correct / total:.2f}%")
