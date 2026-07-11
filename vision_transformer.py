@@ -207,8 +207,8 @@ class EuroSATDataset(Dataset):
     label = item['label']
     return pixel_values,label
 
-train_dataset = EuroSATDataset(ds['train'].shuffle(seed=42).select(range(2000))) 
-test_dataset = EuroSATDataset(ds['test'].shuffle(seed=42).select(range(500)))   
+train_dataset = EuroSATDataset(ds['train']) 
+test_dataset = EuroSATDataset(ds['test'])   
 
 train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
@@ -275,3 +275,59 @@ with torch.no_grad():
         total += labels.size(0)
 
 print(f"Test accuracy: {100 * correct / total:.2f}%")
+
+
+for layer in model_ft.vision_transformer.encoder.layers[-2:]:
+    for param in layer.parameters():
+        param.requires_grad = True
+
+for param in model_ft.classifier.parameters():
+    param.requires_grad = True
+
+trainable = sum(p.numel() for p in model_ft.parameters() if p.requires_grad)
+total = sum(p.numel() for p in model_ft.parameters())
+print(f"Trainable: {trainable:,} / Total: {total:,}")
+
+optimizer = torch.optim.AdamW([
+    {'params': model_ft.classifier.parameters(), 'lr': 1e-3},
+    {'params': model_ft.vision_transformer.encoder.layers[-2:].parameters(), 'lr': 1e-5},
+])
+
+num_epoch_ft = 3
+
+for epoch in range(num_epoch_ft):
+  model_ft.train()
+  total_loss = 0
+
+  for pixel_values, labels in train_loader:
+    pixel_values, labels = pixel_values.to(device), labels.to(device)
+
+    logits = model_ft(pixel_values)
+    loss = criterion(logits, labels)
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    total_loss += loss.item()
+
+  avg_loss = total_loss / len(train_loader)
+  print(f"Fine-tune epoch {epoch+1}/{num_epoch_ft}, Avg Loss: {avg_loss:.4f}")
+
+torch.save(model_ft.state_dict(), 'model_ft_trained.pt')
+print("Model saved.")
+
+# re-check accuracy after fine-tuning
+model_ft.eval()
+correct = 0
+total = 0
+
+with torch.no_grad():
+    for pixel_values, labels in test_loader:
+        pixel_values, labels = pixel_values.to(device), labels.to(device)
+        logits = model_ft(pixel_values)
+        preds = logits.argmax(dim=1)
+        correct += (preds == labels).sum().item()
+        total += labels.size(0)
+
+print(f"Test accuracy after unfreezing: {100 * correct / total:.2f}%")
