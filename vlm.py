@@ -1,6 +1,5 @@
 from datasets import load_dataset
 from transformers import AutoModel, AutoProcessor
-from PIL import Image
 import torch
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -20,7 +19,7 @@ text_prompts = [f"a satellite photo of {name}" for name in class_names]
 correct = 0
 total = 0
 
-for i in range(200):   # sample of 200 test images, keep it fast
+for i in range(200):   # sample of 200 test images
     example = ds['test'][i]
     image = example['image'].convert('RGB')
     true_idx = example['label']
