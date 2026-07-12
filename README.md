@@ -1,4 +1,4 @@
-# Vision Transformer (SigLIP) — Built From Scratch
+# Vision Transformer (SigLIP)
 
 A from-scratch PyTorch reimplementation of the SigLIP vision encoder (ViT architecture), verified numerically against HuggingFace's official implementation, fine-tuned on satellite imagery, and exported for inference in C++.
 
@@ -55,6 +55,27 @@ Fine-tuned on [EuroSAT](https://huggingface.co/datasets/tanganke/eurosat) (10-cl
 | Linear probe (frozen backbone) | 95.11% |
 | + last 2 layers unfrozen | **95.67%** |
 
+## Zero-shot vs. fine-tuned comparison
+
+SigLIP is natively a vision-language model, trained via image-text contrastive learning, and can classify images zero-shot by matching them against natural-language prompts (e.g. `"a satellite photo of forest"`) — with no task-specific training at all. To measure how well the general pretrained checkpoint transfers to satellite imagery without fine-tuning, zero-shot classification was run on the same EuroSAT test set using the full `SiglipModel` (vision + text towers) from HuggingFace.
+
+| Approach | Test accuracy |
+|---|---|
+| Zero-shot (pretrained SigLIP, no training) | 10.00% (≈ random chance on 10 classes) |
+| Fine-tuned, linear probe | 95.11% |
+| Fine-tuned, partial unfreeze | **95.67%** |
+
+**Takeaway**: general-purpose SigLIP pretraining (web images with natural-language captions) transfers essentially not at all to top-down satellite imagery — a substantial domain shift from anything seen during pretraining. This isolates fine-tuning, rather than the pretrained representation alone, as what actually makes the model usable for this task, and was verified with a sanity check on an in-distribution natural image (correctly and confidently classified zero-shot) to confirm the low EuroSAT score reflects a genuine domain gap rather than a pipeline error.
+
+## Attention visualization
+
+`SiglipAttention` was extended with an optional `return_attn` flag to expose raw attention weights (`[B, num_heads, 196, 196]`) from any encoder layer, without altering the layer's normal output. Attention received per patch (averaged across heads and query positions) was reshaped back into the 14×14 patch grid and overlaid on the original image.
+
+**Findings:**
+- Attention concentrates into a small number of sharp, isolated hotspots rather than spreading smoothly across semantically meaningful regions (field boundaries, crop patterns) — consistent with the **attention sink** phenomenon documented in ViT interpretability research, where a small number of tokens accumulate disproportionate attention largely independent of their visual content.
+- Comparing the pretrained backbone against the fine-tuned model (same image, same layer) showed the raw attention maps look visually similar at a glance, but the underlying weights differ meaningfully (max difference 0.22 in attention received at specific patches). A difference map isolated exactly where fine-tuning shifted attention: rather than a broad redistribution, fine-tuning intensified one pre-existing hotspot while leaving most patches essentially unchanged.
+- Inspecting the specific patch most affected by fine-tuning showed no distinguishing visual features (a uniform patch of bare soil) — reinforcing that this is sink-like behavior rather than the model learning to attend to genuinely salient content.
+
 ## C++ inference
 
 The fine-tuned model is exported via `torch.jit.trace` to a self-contained TorchScript file and loaded for inference in C++ using LibTorch (GPU/CUDA build) — no Python runtime required at inference time.
@@ -104,6 +125,8 @@ Predicted class: <0-9>
 
 ```
 ├── vision_transformer.py      # Full from-scratch ViT/SigLIP implementation + training
+├── vlm.py                     # Zero-shot classification via full SigLIP (vision + text)
+├── attention_viz.py           # Attention extraction + heatmap visualization
 ├── model_tracing.py           # TorchScript export for C++ deployment
 ├── cpp_inference/             # C++ inference via LibTorch
 │   ├── CMakeLists.txt
@@ -119,6 +142,8 @@ torchvision
 transformers
 datasets
 pillow
+matplotlib
+scikit-learn
 ```
 
 For C++ inference: [LibTorch](https://pytorch.org/get-started/locally/) and CMake ≥ 3.18.
